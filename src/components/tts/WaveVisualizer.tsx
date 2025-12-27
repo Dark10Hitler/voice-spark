@@ -42,6 +42,16 @@ export function WaveVisualizer({
 
     const freq = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
 
+    const cssVarToHsla = (varName: string, alpha: number) => {
+      const raw = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+      const m = raw.match(/([\d.]+)\s+([\d.]+)%\s+([\d.]+)%/);
+      if (!m) return `hsla(234, 89%, 60%, ${alpha})`;
+      const h = Number(m[1]);
+      const s = Number(m[2]);
+      const l = Number(m[3]);
+      return `hsla(${h}, ${s}%, ${l}%, ${alpha})`;
+    };
+
     const draw = (t: number) => {
       const { width, height } = canvas.getBoundingClientRect();
       ctx.clearRect(0, 0, width, height);
@@ -51,10 +61,10 @@ export function WaveVisualizer({
       const barW = (width - gap * (bars - 1)) / bars;
       const base = height * 0.22;
 
-      // gradient fill
+      // gradient fill (Canvas cannot parse CSS var functions like `hsla(var(--brand) / 0.9)`)
       const g = ctx.createLinearGradient(0, 0, width, 0);
-      g.addColorStop(0, "hsla(var(--brand) / 0.90)");
-      g.addColorStop(1, "hsla(var(--brand-2) / 0.90)");
+      g.addColorStop(0, cssVarToHsla("--brand", 0.9));
+      g.addColorStop(1, cssVarToHsla("--brand-2", 0.9));
 
       for (let i = 0; i < bars; i++) {
         let level = 0;

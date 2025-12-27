@@ -116,8 +116,9 @@ export function TtsStudio() {
       return;
     }
 
+    // IMPORTANT: There is no universal way to route `speechSynthesis` output into Web Audio without tab/system capture.
     if (!canExport) {
-      toast.error("Your browser does not support tab-audio capture for MP3 export.");
+      toast.error("MP3 export isn’t supported in this browser. Try Chrome on desktop.");
       return;
     }
 
@@ -129,13 +130,19 @@ export function TtsStudio() {
     try {
       stop();
 
+      // User gesture activation for Web Audio
+      const ctx = audioCtxRef.current ?? new AudioContext();
+      audioCtxRef.current = ctx;
+      if (ctx.state === "suspended") await ctx.resume();
+
       // Ask user to share the current tab with audio.
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
 
       const audioTrack = stream.getAudioTracks()[0];
       if (!audioTrack) {
         stream.getTracks().forEach((t) => t.stop());
-        throw new Error("No audio track received. Please enable 'Share tab audio'.");
+        toast.error("MP3 export needs tab audio. Select 'This tab' and enable 'Share tab audio'.");
+        return;
       }
 
       const mimeCandidates = [
@@ -371,7 +378,7 @@ export function TtsStudio() {
             <div className="glass-card rounded-2xl p-4">
               <p className="text-sm font-semibold">Export</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                MP3 export is 100% local, but requires tab-audio capture (browser limitation).
+                MP3 export is 100% local. Due to browser limitations, it captures this tab’s audio (you’ll be prompted).
               </p>
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -483,8 +490,9 @@ export function TtsStudio() {
           <h3 className="text-sm font-semibold">Export checklist</h3>
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
             <li>Click “Download MP3”.</li>
-            <li>Select “This tab” and enable “Share tab audio”.</li>
-            <li>Keep the tab focused until export finishes.</li>
+            <li>In the browser prompt, choose “This tab”.</li>
+            <li>Turn on “Share tab audio” (otherwise export will be silent).</li>
+            <li>Keep this tab focused until export finishes.</li>
           </ol>
         </div>
       </aside>
