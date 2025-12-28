@@ -298,8 +298,15 @@ export function TtsStudio() {
               </p>
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
-                <Button type="button" variant="hero" onClick={exportMp3} disabled={exporting}>
-                  <Download size={18} strokeWidth={1.5} /> Download MP3
+                <Button 
+                  type="button" 
+                  variant="hero" 
+                  onClick={exportMp3} 
+                  disabled={exporting}
+                  className={exporting ? "animate-pulse-glow" : ""}
+                >
+                  <Download size={18} strokeWidth={1.5} /> 
+                  {exporting ? "Generating..." : "Download MP3"}
                 </Button>
                 {exporting ? (
                   <Button type="button" variant="premium" onClick={cancelExport}>
@@ -318,22 +325,45 @@ export function TtsStudio() {
                     className="mt-4"
                   >
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Processing & downloading…</span>
-                      <span>{progress}%</span>
+                      <span className="flex items-center gap-2">
+                        <span className="inline-block h-2 w-2 rounded-full bg-brand animate-pulse" />
+                        Generating audio...
+                      </span>
+                      <span className="font-medium text-foreground">{progress}%</span>
                     </div>
-                    <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted/50">
-                      <div className="h-full bg-gradient-brand" style={{ width: `${progress}%` }} />
+                    <div className="relative mt-2 h-2 w-full overflow-hidden rounded-full bg-muted/50">
+                      <motion.div 
+                        className="h-full bg-gradient-brand" 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${progress}%` }}
+                        transition={{ duration: 0.3, ease: "easeOut" }}
+                      />
+                      <div className="absolute inset-0 overflow-hidden">
+                        <div className="h-full w-1/4 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-progress-shine" />
+                      </div>
                     </div>
                   </motion.div>
                 ) : null}
               </AnimatePresence>
 
-              {previewUrl ? (
-                <div className="mt-4">
-                  <p className="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">Preview</p>
-                  <audio ref={audioElRef} controls className="mt-2 w-full" src={previewUrl} />
-                </div>
-              ) : null}
+              <AnimatePresence>
+                {previewUrl ? (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 8 }}
+                    className="mt-4"
+                  >
+                    <p className="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">Preview</p>
+                    <audio 
+                      ref={audioElRef} 
+                      controls 
+                      className="mt-2 w-full rounded-lg" 
+                      src={previewUrl} 
+                    />
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
             </div>
           </div>
 

@@ -5,14 +5,21 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Language code mapping for Google TTS
+const langMap: Record<string, string> = {
+  en: "en", "en-us": "en", "en-gb": "en-GB",
+  ru: "ru", es: "es", fr: "fr", de: "de", it: "it",
+  pt: "pt", zh: "zh-CN", ja: "ja", ko: "ko",
+  ar: "ar", hi: "hi", pl: "pl", uk: "uk", tr: "tr", nl: "nl",
+};
+
 serve(async (req) => {
-  // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { text, lang } = await req.json();
+    const { text, lang = "en" } = await req.json();
 
     if (!text || typeof text !== "string") {
       return new Response(
@@ -23,72 +30,81 @@ serve(async (req) => {
 
     console.log(`TTS request: lang=${lang}, text length=${text.length}`);
 
-    // Select model based on language
-    let model = "facebook/mms-tts-eng"; // Default English
-    
-    if (lang) {
-      const langLower = lang.toLowerCase();
-      if (langLower.startsWith("ru")) {
-        model = "facebook/mms-tts-rus";
-      } else if (langLower.startsWith("es")) {
-        model = "facebook/mms-tts-spa";
-      } else if (langLower.startsWith("fr")) {
-        model = "facebook/mms-tts-fra";
-      } else if (langLower.startsWith("de")) {
-        model = "facebook/mms-tts-deu";
-      } else if (langLower.startsWith("it")) {
-        model = "facebook/mms-tts-ita";
-      } else if (langLower.startsWith("pt")) {
-        model = "facebook/mms-tts-por";
-      } else if (langLower.startsWith("zh")) {
-        model = "facebook/mms-tts-cmn";
-      } else if (langLower.startsWith("ja")) {
-        model = "facebook/mms-tts-jpn";
-      } else if (langLower.startsWith("ko")) {
-        model = "facebook/mms-tts-kor";
-      } else if (langLower.startsWith("ar")) {
-        model = "facebook/mms-tts-ara";
-      } else if (langLower.startsWith("hi")) {
-        model = "facebook/mms-tts-hin";
-      } else if (langLower.startsWith("pl")) {
-        model = "facebook/mms-tts-pol";
-      } else if (langLower.startsWith("uk")) {
-        model = "facebook/mms-tts-ukr";
-      } else if (langLower.startsWith("tr")) {
-        model = "facebook/mms-tts-tur";
-      } else if (langLower.startsWith("nl")) {
-        model = "facebook/mms-tts-nld";
+    // Resolve language code
+    const langLower = (lang || "en").toLowerCase().split("-")[0];
+    const ttsLang = langMap[langLower] || langMap[lang.toLowerCase()] || "en";
+
+    // Split text into chunks (Google TTS has ~200 char limit per request)
+    const maxChunkSize = 200;
+    const chunks: string[] = [];
+    let remaining = text.trim();
+
+    while (remaining.length > 0) {
+      if (remaining.length <= maxChunkSize) {
+        chunks.push(remaining);
+        break;
       }
+
+      // Find a good break point
+      let breakPoint = remaining.lastIndexOf(". ", maxChunkSize);
+      if (breakPoint === -1 || breakPoint < 50) {
+        breakPoint = remaining.lastIndexOf(", ", maxChunkSize);
+      }
+      if (breakPoint === -1 || breakPoint < 50) {
+        breakPoint = remaining.lastIndexOf(" ", maxChunkSize);
+      }
+      if (breakPoint === -1 || breakPoint < 50) {
+        breakPoint = maxChunkSize;
+      }
+
+      chunks.push(remaining.slice(0, breakPoint + 1).trim());
+      remaining = remaining.slice(breakPoint + 1).trim();
     }
 
-    console.log(`Using TTS model: ${model}`);
+    console.log(`Split into ${chunks.length} chunks`);
 
-    // Use the new Hugging Face router endpoint
-    const response = await fetch(`https://router.huggingface.co/hf-inference/models/${model}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ inputs: text }),
-    });
+    // Fetch audio for each chunk
+    const audioBuffers: ArrayBuffer[] = [];
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("HF API error:", response.status, errorText);
-      throw new Error(`TTS API error: ${response.status}`);
+    for (const chunk of chunks) {
+      const encodedText = encodeURIComponent(chunk);
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${ttsLang}&client=tw-ob&q=${encodedText}`;
+
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+      });
+
+      if (!response.ok) {
+        console.error(`Google TTS error for chunk: ${response.status}`);
+        throw new Error(`TTS generation failed: ${response.status}`);
+      }
+
+      const buffer = await response.arrayBuffer();
+      audioBuffers.push(buffer);
     }
 
-    // Get audio blob
-    const audioBuffer = await response.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
+    // Combine all audio buffers
+    const totalLength = audioBuffers.reduce((sum, buf) => sum + buf.byteLength, 0);
+    const combined = new Uint8Array(totalLength);
+    let offset = 0;
 
-    console.log(`Generated audio: ${audioBuffer.byteLength} bytes`);
+    for (const buf of audioBuffers) {
+      combined.set(new Uint8Array(buf), offset);
+      offset += buf.byteLength;
+    }
+
+    // Convert to base64
+    const base64 = btoa(String.fromCharCode(...combined));
+
+    console.log(`Generated audio: ${combined.length} bytes from ${chunks.length} chunks`);
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         audio: base64,
-        contentType: response.headers.get("content-type") || "audio/wav",
-        model 
+        contentType: "audio/mpeg",
+        chunks: chunks.length,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
