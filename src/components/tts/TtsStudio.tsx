@@ -25,6 +25,7 @@ import { chunkText } from "@/components/tts/split";
 import { AdSlot } from "@/components/ads/AdSlot";
 
 import { applyOfflineEffects, encodeMp3FromAudioBuffer } from "@/lib/audio/export";
+import { supabase } from "@/integrations/supabase/client";
 
 type Effects = { radio: boolean; echo: boolean; crystal: boolean };
 
@@ -108,159 +109,72 @@ export function TtsStudio() {
     setEffects(p.effects);
   };
 
-  const canExport = typeof navigator !== "undefined" && !!navigator.mediaDevices?.getDisplayMedia;
-
   const exportMp3 = async () => {
     if (!text.trim()) {
       toast.error("Please add some text first.");
       return;
     }
 
-    // IMPORTANT: There is no universal way to route `speechSynthesis` output into Web Audio without tab/system capture.
-    if (!canExport) {
-      toast.error("MP3 export isn’t supported in this browser. Try Chrome on desktop.");
-      return;
-    }
-
-    // Browser policy: export must start from a direct click.
     cancelRef.current = false;
     setExporting(true);
-    setProgress(1);
+    setProgress(10);
 
     try {
       stop();
 
-      // User gesture activation for Web Audio
-      const ctx = audioCtxRef.current ?? new AudioContext();
-      audioCtxRef.current = ctx;
-      if (ctx.state === "suspended") await ctx.resume();
-
-      // Ask user to share the current tab with audio.
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-
-      const audioTrack = stream.getAudioTracks()[0];
-      if (!audioTrack) {
-        stream.getTracks().forEach((t) => t.stop());
-        toast.error("MP3 export needs tab audio. Select 'This tab' and enable 'Share tab audio'.");
-        return;
-      }
-
-      const mimeCandidates = [
-        "audio/webm;codecs=opus",
-        "audio/webm",
-      ];
-      const mimeType = mimeCandidates.find((m) => MediaRecorder.isTypeSupported(m)) || "";
-
-      const recorder = new MediaRecorder(stream, {
-        mimeType: mimeType || undefined,
-        audioBitsPerSecond: 192000,
-      });
-
-      const chunks: BlobPart[] = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) chunks.push(e.data);
-      };
-
-      const estimateMs = Math.max(4000, Math.min(120000, Math.floor(text.length * 55)));
-      const startedAt = performance.now();
-
-      const tick = () => {
-        if (!exporting) return;
-        const elapsed = performance.now() - startedAt;
-        const pct = Math.min(95, Math.max(1, Math.floor((elapsed / estimateMs) * 95)));
-        setProgress(pct);
-        if (pct < 95) requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-
-      const recordAndSpeak = async () => {
-        // Force safe export settings
-        const exportRate = 1;
-        const exportVolume = 1;
-
-        const utterances = buildUtterances(text, {
-          voice: resolvedVoice ?? undefined,
-          pitch,
-          rate: exportRate,
-          volume: exportVolume,
-          lang: detectedLanguage.tag,
-          onChunkBoundaryAbs: () => {
-            // Just a pulse for the UI
-          },
-        });
-
-        let idx = 0;
-        const speakOne = () => {
-          if (cancelRef.current) return;
-          const u = utterances[idx];
-          if (!u) return;
-
-          u.onstart = () => {
-            if (recorder.state === "inactive") recorder.start(250);
-          };
-
-          u.onend = () => {
-            idx += 1;
-            if (idx < utterances.length) {
-              window.speechSynthesis.speak(utterances[idx]);
-              return;
-            }
-
-            // Explicit stop logic + buffer flush
-            if (recorder.state !== "inactive") recorder.stop();
-            window.setTimeout(() => {
-              stream.getTracks().forEach((t) => t.stop());
-            }, 300);
-          };
-
-          u.onerror = () => {
-            if (recorder.state !== "inactive") recorder.stop();
-            stream.getTracks().forEach((t) => t.stop());
-          };
-
-          window.speechSynthesis.speak(u);
-        };
-
-        speakOne();
-      };
-
-      const resultBlob: Blob = await new Promise((resolve, reject) => {
-        recorder.onstop = async () => {
-          try {
-            if (cancelRef.current) return reject(new Error("Export cancelled"));
-
-            setProgress(95);
-
-            const webm = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
-            const rawBuffer = await webm.arrayBuffer();
-
-            const ctx = audioCtxRef.current ?? new AudioContext();
-            audioCtxRef.current = ctx;
-
-            if (ctx.state === "suspended") await ctx.resume();
-
-            const decoded = await ctx.decodeAudioData(rawBuffer.slice(0));
-            const processed = await applyOfflineEffects(decoded, effects);
-
-            const mp3 = await encodeMp3FromAudioBuffer(processed, 192);
-
-            setProgress(100);
-            resolve(mp3);
-          } catch (e: any) {
-            reject(e);
-          }
-        };
-
-        void recordAndSpeak().catch(reject);
+      // Call the Hugging Face TTS edge function
+      setProgress(20);
+      
+      const { data, error } = await supabase.functions.invoke("text-to-speech", {
+        body: { text: text.trim(), lang: detectedLanguage.tag },
       });
 
       if (cancelRef.current) throw new Error("Export cancelled");
 
+      if (error) {
+        throw new Error(error.message || "TTS API error");
+      }
+
+      if (!data?.audio) {
+        throw new Error("No audio returned from TTS service");
+      }
+
+      setProgress(60);
+
+      // Decode base64 to audio buffer
+      const binaryString = atob(data.audio);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      const ctx = audioCtxRef.current ?? new AudioContext();
+      audioCtxRef.current = ctx;
+      if (ctx.state === "suspended") await ctx.resume();
+
+      setProgress(70);
+
+      // Decode to AudioBuffer
+      const decoded = await ctx.decodeAudioData(bytes.buffer);
+
+      // Apply effects
+      const processed = await applyOfflineEffects(decoded, effects);
+
+      setProgress(85);
+
+      // Encode to MP3
+      const mp3Blob = await encodeMp3FromAudioBuffer(processed, 192);
+
+      setProgress(100);
+
+      if (cancelRef.current) throw new Error("Export cancelled");
+
+      // Clean up old preview
       if (previewUrl) URL.revokeObjectURL(previewUrl);
-      const url = URL.createObjectURL(resultBlob);
+      const url = URL.createObjectURL(mp3Blob);
       setPreviewUrl(url);
 
-      // Auto-download after preview is ready
+      // Auto-download
       const link = document.createElement("a");
       link.href = url;
       link.download = `audio-speech-${Date.now()}.mp3`;
@@ -268,9 +182,11 @@ export function TtsStudio() {
       link.click();
       link.remove();
 
-      toast.success("MP3 export started. Preview is ready below.");
+      toast.success("MP3 downloaded successfully!");
     } catch (e: any) {
-      toast.error(e?.message || "Export failed. Please try again.");
+      if (!cancelRef.current) {
+        toast.error(e?.message || "Export failed. Please try again.");
+      }
     } finally {
       setExporting(false);
       setProgress(0);
