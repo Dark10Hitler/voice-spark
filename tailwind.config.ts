@@ -108,6 +108,18 @@ export default {
           "0%": { backgroundPosition: "0% 50%" },
           "100%": { backgroundPosition: "100% 50%" },
         },
+        "pulse-glow": {
+          "0%, 100%": { 
+            boxShadow: "0 0 8px hsl(var(--brand) / 0.3), 0 0 16px hsl(var(--brand) / 0.15)" 
+          },
+          "50%": { 
+            boxShadow: "0 0 20px hsl(var(--brand) / 0.5), 0 0 40px hsl(var(--brand) / 0.25)" 
+          },
+        },
+        "progress-shine": {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(400%)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -115,6 +127,8 @@ export default {
         breath: "breath 2.2s ease-in-out infinite",
         float: "float 6s ease-in-out infinite",
         shimmer: "shimmer 4s ease-in-out infinite",
+        "pulse-glow": "pulse-glow 1.5s ease-in-out infinite",
+        "progress-shine": "progress-shine 1.5s ease-in-out infinite",
       },
     },
   },

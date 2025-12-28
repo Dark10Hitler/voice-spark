@@ -2,6 +2,8 @@ import { Seo } from "@/components/seo/Seo";
 import { AppShell } from "@/components/layout/AppShell";
 import { TtsStudio } from "@/components/tts/TtsStudio";
 import { GuideFaq } from "@/components/tts/GuideFaq";
+import { SeoFooter } from "@/components/seo/SeoFooter";
+import { AdSlot } from "@/components/ads/AdSlot";
 
 const Index = () => {
   return (
@@ -26,8 +28,21 @@ const Index = () => {
         }}
       />
 
-      <TtsStudio />
-      <GuideFaq />
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
+        <div className="space-y-8">
+          <TtsStudio />
+          <GuideFaq />
+        </div>
+        
+        {/* Sidebar with Ad */}
+        <aside className="hidden lg:block space-y-6">
+          <div className="sticky top-6">
+            <AdSlot slotId="SIDEBAR_RECTANGLE" label="Sponsored" sizeHint="300x250" />
+          </div>
+        </aside>
+      </div>
+
+      <SeoFooter />
     </AppShell>
   );
 };
