@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { HfInference } from "https://esm.sh/@huggingface/inference@2.3.2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -24,12 +23,7 @@ serve(async (req) => {
 
     console.log(`TTS request: lang=${lang}, text length=${text.length}`);
 
-    // Use Hugging Face Inference API (free tier, no API key required for public models)
-    const hf = new HfInference();
-
     // Select model based on language
-    // facebook/mms-tts models support many languages
-    // For English, use a high-quality model
     let model = "facebook/mms-tts-eng"; // Default English
     
     if (lang) {
@@ -47,7 +41,7 @@ serve(async (req) => {
       } else if (langLower.startsWith("pt")) {
         model = "facebook/mms-tts-por";
       } else if (langLower.startsWith("zh")) {
-        model = "facebook/mms-tts-cmn"; // Mandarin
+        model = "facebook/mms-tts-cmn";
       } else if (langLower.startsWith("ja")) {
         model = "facebook/mms-tts-jpn";
       } else if (langLower.startsWith("ko")) {
@@ -69,22 +63,31 @@ serve(async (req) => {
 
     console.log(`Using TTS model: ${model}`);
 
-    // Generate audio using Hugging Face
-    const audioBlob = await hf.textToSpeech({
-      inputs: text,
-      model,
+    // Use the new Hugging Face router endpoint
+    const response = await fetch(`https://router.huggingface.co/hf-inference/models/${model}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ inputs: text }),
     });
 
-    // Convert blob to base64
-    const arrayBuffer = await audioBlob.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("HF API error:", response.status, errorText);
+      throw new Error(`TTS API error: ${response.status}`);
+    }
 
-    console.log(`Generated audio: ${arrayBuffer.byteLength} bytes`);
+    // Get audio blob
+    const audioBuffer = await response.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
+
+    console.log(`Generated audio: ${audioBuffer.byteLength} bytes`);
 
     return new Response(
       JSON.stringify({ 
         audio: base64,
-        contentType: audioBlob.type || "audio/wav",
+        contentType: response.headers.get("content-type") || "audio/wav",
         model 
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
