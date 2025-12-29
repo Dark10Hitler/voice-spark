@@ -28,18 +28,48 @@ const Index = () => {
         }}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
-        <div className="space-y-8">
+      {/* Main Content Area */}
+      <div className="flex flex-col lg:flex-row gap-8">
+        {/* Primary Content */}
+        <main className="flex-1 min-w-0">
           <TtsStudio />
-          <GuideFaq />
-        </div>
+          
+          {/* FAQ Section */}
+          <div className="max-w-studio mx-auto mt-16">
+            <GuideFaq />
+          </div>
+        </main>
         
-        {/* Sidebar with Ad */}
-        <aside className="hidden lg:block space-y-6">
-          <div className="sticky top-6">
+        {/* Sidebar Ad - Non-intrusive */}
+        <aside className="hidden xl:block w-[300px] shrink-0">
+          <div className="sticky top-8 space-y-6">
             <AdSlot slotId="SIDEBAR_RECTANGLE" label="Sponsored" sizeHint="300x250" />
+            
+            {/* Quick Tips Card */}
+            <div className="glass-card rounded-2xl p-5">
+              <h3 className="text-sm font-semibold mb-3">Pro Tips</h3>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <span className="text-brand mt-0.5">•</span>
+                  Use presets for quick mood changes
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-brand mt-0.5">•</span>
+                  Adjust speed for better clarity
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-brand mt-0.5">•</span>
+                  Drop .docx or .txt files directly
+                </li>
+              </ul>
+            </div>
           </div>
         </aside>
+      </div>
+
+      {/* Bottom Ad - Horizontal Footer Style */}
+      <div className="max-w-studio mx-auto mt-16">
+        <AdSlot slotId="BOTTOM_RESPONSIVE" label="Sponsored" className="rounded-xl overflow-hidden" />
       </div>
 
       <SeoFooter />

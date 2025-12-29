@@ -1,13 +1,23 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Pause, Square, Download, Wand2, AudioLines } from "lucide-react";
+import { 
+  Sparkles, 
+  Download, 
+  Volume2, 
+  Languages, 
+  Gauge, 
+  AudioWaveform,
+  ChevronDown,
+  Play,
+  Pause,
+  Square,
+  Loader2
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -16,13 +26,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 import { PresetBar, type Preset } from "@/components/tts/PresetBar";
 import { FileDropZone } from "@/components/tts/FileDropZone";
 import { WaveVisualizer } from "@/components/tts/WaveVisualizer";
 import { useSpeechEngine } from "@/components/tts/useSpeechEngine";
-import { chunkText } from "@/components/tts/split";
-import { AdSlot } from "@/components/ads/AdSlot";
 
 // Voice mapping: detected language -> edge-tts voice ID
 const VOICE_MAP: Record<string, string> = {
@@ -46,10 +59,7 @@ const BACKEND_URL = "https://back-z6i3.onrender.com";
 type Effects = { radio: boolean; echo: boolean; crystal: boolean };
 
 export function TtsStudio() {
-  const [text, setText] = useState(
-    "Write your script here…\n\nTip: paste your YouTube Shorts hook, then choose a mood preset and hit Play.",
-  );
-
+  const [text, setText] = useState("");
   const [voiceURI, setVoiceURI] = useState<string | undefined>(undefined);
   const [rate, setRate] = useState(1);
   const [pitch, setPitch] = useState(1);
@@ -60,13 +70,14 @@ export function TtsStudio() {
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [loadingMessage, setLoadingMessage] = useState("Creating high-quality MP3...");
+  const [loadingMessage, setLoadingMessage] = useState("Generating audio...");
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
   const cancelRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const { voices, resolvedVoice, state, speak, pause, resume, stop, detectedLanguage } = useSpeechEngine(text, {
     voiceURI,
@@ -77,26 +88,16 @@ export function TtsStudio() {
 
   const pulse = useMemo(() => (state.highlight ? state.highlight.start : 0), [state.highlight]);
 
-  const highlightedMarkup = useMemo(() => {
-    const h = state.highlight;
-    if (!h) return text;
-    const start = Math.max(0, h.start);
-    const end = Math.min(text.length, h.end);
-    return `${text.slice(0, start)}[[H]]${text.slice(start, end)}[[/H]]${text.slice(end)}`;
-  }, [state.highlight, text]);
-
   useEffect(() => {
     if (!previewUrl) return;
     const el = audioElRef.current;
     if (!el) return;
 
-    // Create AudioContext if needed
     if (!audioCtxRef.current) {
       audioCtxRef.current = new AudioContext();
     }
     const ctx = audioCtxRef.current;
 
-    // Create analyser if needed
     if (!analyserRef.current) {
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 2048;
@@ -104,7 +105,6 @@ export function TtsStudio() {
       analyser.connect(ctx.destination);
     }
 
-    // Only create MediaElementSource once per audio element
     if (!sourceNodeRef.current) {
       const src = ctx.createMediaElementSource(el);
       src.connect(analyserRef.current);
@@ -137,31 +137,21 @@ export function TtsStudio() {
     cancelRef.current = false;
     setExporting(true);
     setProgress(10);
-    setLoadingMessage("Creating high-quality MP3...");
+    setLoadingMessage("Generating audio...");
 
     try {
       stop();
-
-      // Get the voice ID for the detected language
       const voiceId = VOICE_MAP[detectedLanguage.tag] || VOICE_MAP.en;
-
       setProgress(20);
 
-      // Show cold-start message after 3 seconds
       const coldStartTimer = setTimeout(() => {
-        setLoadingMessage("Server is starting up, please wait...");
+        setLoadingMessage("Server warming up...");
       }, 3000);
 
-      // Call the Python backend
       const response = await fetch(`${BACKEND_URL}/generate`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          text: text.trim(),
-          voice: voiceId,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: text.trim(), voice: voiceId }),
       });
 
       clearTimeout(coldStartTimer);
@@ -174,9 +164,8 @@ export function TtsStudio() {
       }
 
       setProgress(70);
-      setLoadingMessage("Processing audio...");
+      setLoadingMessage("Processing...");
 
-      // Get the MP3 blob directly from response
       const mp3Blob = await response.blob();
 
       if (!mp3Blob || mp3Blob.size === 0) {
@@ -187,12 +176,10 @@ export function TtsStudio() {
 
       if (cancelRef.current) throw new Error("Export cancelled");
 
-      // Clean up old preview
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       const url = URL.createObjectURL(mp3Blob);
       setPreviewUrl(url);
 
-      // Auto-download with fixed filename
       const link = document.createElement("a");
       link.href = url;
       link.download = "voiceover.mp3";
@@ -200,7 +187,7 @@ export function TtsStudio() {
       link.click();
       link.remove();
 
-      toast.success("MP3 downloaded successfully!");
+      toast.success("Audio generated and downloaded!");
     } catch (e: any) {
       if (!cancelRef.current) {
         toast.error(e?.message || "Export failed. Please try again.");
@@ -208,348 +195,283 @@ export function TtsStudio() {
     } finally {
       setExporting(false);
       setProgress(0);
-      setLoadingMessage("Creating high-quality MP3...");
+      setLoadingMessage("Generating audio...");
     }
   };
 
   const cancelExport = () => {
     cancelRef.current = true;
-    try {
-      window.speechSynthesis.cancel();
-    } catch {
-      // ignore
-    }
     setExporting(false);
     setProgress(0);
     toast.message("Export cancelled.");
   };
 
+  const charCount = text.length;
+  const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+
   return (
-    <section aria-label="Text to speech studio" className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
-      <motion.article
+    <div className="w-full max-w-studio mx-auto">
+      {/* Header */}
+      <motion.header 
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-center mb-8"
+      >
+        <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-gradient mb-3">
+          Text to Speech Studio
+        </h1>
+        <p className="text-muted-foreground text-sm md:text-base max-w-lg mx-auto">
+          Transform your text into natural-sounding audio. Perfect for content creators.
+        </p>
+      </motion.header>
+
+      {/* Main Writing Surface */}
+      <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, ease: "easeOut" }}
-        className={
-          "glass-card glow-soft rounded-3xl p-5 md:p-7 " +
-          (state.isSpeaking ? "ring-glow motion-safe:animate-breath" : "")
-        }
+        transition={{ delay: 0.1 }}
+        className="writing-surface rounded-2xl overflow-hidden"
       >
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-          <div>
-            <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
-              <span className="text-gradient">Premium Voice Studio</span>
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Free Text to Speech for TikTok creators with natural voices, word highlighting, and MP3 export — no
-              registration.
-            </p>
-          </div>
+        {/* Magic Toolbar */}
+        <div className="magic-toolbar border-b border-border/50 px-4 py-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              {/* Voice Select */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="toolbar" className="gap-1.5">
+                    <Volume2 size={14} />
+                    <span className="hidden sm:inline">{resolvedVoice?.name?.split(' ')[0] || 'Voice'}</span>
+                    <ChevronDown size={12} />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 p-3" align="start">
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-2 block">Voice</Label>
+                      <Select value={voiceURI ?? "auto"} onValueChange={(v) => setVoiceURI(v === "auto" ? undefined : v)}>
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Auto-select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="auto">Auto (best match)</SelectItem>
+                          {voices.map((v) => (
+                            <SelectItem key={v.voiceURI} value={v.voiceURI}>
+                              {v.name} — {v.lang}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Detected: <span className="font-medium text-foreground">{detectedLanguage.tag.toUpperCase()}</span>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
 
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="hero" onClick={() => (state.isSpeaking ? pause() : speak())}>
-              {state.isSpeaking ? (
-                <>
-                  <Pause size={18} strokeWidth={1.5} /> Pause
-                </>
-              ) : (
-                <>
-                  <Play size={18} strokeWidth={1.5} /> Play
-                </>
-              )}
-            </Button>
-            <Button type="button" variant="premium" onClick={resume} disabled={!state.isPaused}>
-              <AudioLines size={18} strokeWidth={1.5} /> Resume
-            </Button>
-            <Button type="button" variant="premium" onClick={stop}>
-              <Square size={18} strokeWidth={1.5} /> Stop
-            </Button>
+              {/* Speed Control */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="toolbar" className="gap-1.5">
+                    <Gauge size={14} />
+                    <span className="hidden sm:inline">{rate.toFixed(1)}x</span>
+                    <ChevronDown size={12} />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-56 p-4" align="start">
+                  <Label className="text-xs text-muted-foreground mb-3 block">Speed: {rate.toFixed(2)}x</Label>
+                  <Slider value={[rate]} min={0.5} max={2} step={0.1} onValueChange={(v) => setRate(v[0])} />
+                </PopoverContent>
+              </Popover>
+
+              {/* Pitch Control */}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="toolbar" className="gap-1.5">
+                    <AudioWaveform size={14} />
+                    <span className="hidden sm:inline">Pitch</span>
+                    <ChevronDown size={12} />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-56 p-4" align="start">
+                  <Label className="text-xs text-muted-foreground mb-3 block">Pitch: {pitch.toFixed(2)}</Label>
+                  <Slider value={[pitch]} min={0.5} max={1.5} step={0.05} onValueChange={(v) => setPitch(v[0])} />
+                </PopoverContent>
+              </Popover>
+
+              {/* Language indicator */}
+              <div className="hidden md:flex items-center gap-1.5 text-xs text-muted-foreground px-2.5 h-8">
+                <Languages size={14} />
+                <span>{detectedLanguage.tag.toUpperCase()}</span>
+              </div>
+            </div>
+
+            {/* Preview Controls */}
+            <div className="flex items-center gap-1">
+              <Button 
+                variant="toolbar" 
+                size="icon" 
+                className="h-8 w-8"
+                onClick={() => (state.isSpeaking ? pause() : speak())}
+              >
+                {state.isSpeaking ? <Pause size={14} /> : <Play size={14} />}
+              </Button>
+              <Button 
+                variant="toolbar" 
+                size="icon" 
+                className="h-8 w-8"
+                onClick={stop}
+              >
+                <Square size={12} />
+              </Button>
+            </div>
           </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-4">
-          <Textarea
+        {/* Textarea */}
+        <div className="p-6 md:p-8">
+          <textarea
+            ref={textareaRef}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            className="min-h-[180px] rounded-2xl"
+            placeholder="Start typing or paste your script here..."
+            className="premium-textarea w-full min-h-[240px] md:min-h-[300px]"
             aria-label="Text input for text to speech"
           />
-
-          <WaveVisualizer isActive={state.isSpeaking || exporting} pulse={pulse} analyser={previewUrl ? analyserRef.current : null} />
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="glass-card rounded-2xl p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-semibold">Voice</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Auto language: <span className="font-medium">{detectedLanguage.tag}</span>
-                  </p>
-                </div>
-                <Wand2 size={18} strokeWidth={1.5} className="text-muted-foreground" />
-              </div>
-
-              <div className="mt-3">
-                <Select value={voiceURI ?? "auto"} onValueChange={(v) => setVoiceURI(v === "auto" ? undefined : v)}>
-                  <SelectTrigger className="rounded-xl">
-                    <SelectValue placeholder="Auto-select best voice" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="auto">Auto (best match)</SelectItem>
-                    {voices.map((v) => (
-                      <SelectItem key={v.voiceURI} value={v.voiceURI}>
-                        {v.name} — {v.lang}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <p className="mt-2 text-xs text-muted-foreground">
-                  Selected: <span className="font-medium">{resolvedVoice?.name ?? "—"}</span>
-                </p>
-              </div>
+          
+          {/* Character count */}
+          <div className="flex items-center justify-between mt-4 pt-4 border-t border-border/30">
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <span>{charCount} characters</span>
+              <span>{wordCount} words</span>
             </div>
+            <FileDropZone onText={(t) => setText(t)} compact />
+          </div>
+        </div>
+      </motion.div>
 
-            <div className="glass-card rounded-2xl p-4">
-              <p className="text-sm font-semibold">Export</p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                AI-powered TTS export. No permissions needed — works on all devices.
+      {/* Presets */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="mt-6"
+      >
+        <PresetBar
+          activeId={activePreset}
+          onPreset={(p) => {
+            onPreset(p);
+            toast.success(`${p.label} preset applied`);
+          }}
+        />
+      </motion.div>
+
+      {/* Generate CTA */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
+        className="mt-8"
+      >
+        <div className="glass-card-elevated rounded-2xl p-6 md:p-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="text-center md:text-left">
+              <h2 className="text-lg font-semibold mb-1">Ready to generate?</h2>
+              <p className="text-sm text-muted-foreground">
+                AI-powered neural voices. No account required.
               </p>
+            </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <Button 
-                  type="button" 
-                  variant="hero" 
-                  onClick={exportMp3} 
-                  disabled={exporting}
-                  className={exporting ? "animate-pulse-glow" : ""}
-                >
-                  <Download size={18} strokeWidth={1.5} /> 
-                  {exporting ? "Generating..." : "Download MP3"}
+            <div className="flex items-center gap-3">
+              {exporting && (
+                <Button variant="outline" size="sm" onClick={cancelExport}>
+                  Cancel
                 </Button>
+              )}
+              <Button
+                variant="hero"
+                size="lg"
+                onClick={exportMp3}
+                disabled={exporting || !text.trim()}
+                className={exporting ? "animate-pulse-glow" : ""}
+              >
                 {exporting ? (
-                  <Button type="button" variant="premium" onClick={cancelExport}>
-                    Cancel
-                  </Button>
-                ) : null}
-                <span className="rounded-full bg-accent px-3 py-1 text-xs font-medium text-accent-foreground">MP3</span>
-              </div>
+                  <>
+                    <Loader2 size={18} className="animate-spin" />
+                    {loadingMessage}
+                  </>
+                ) : (
+                  <>
+                    <Sparkles size={18} />
+                    Generate Audio
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
 
-              <AnimatePresence>
-                {exporting ? (
-                  <motion.div
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 6 }}
-                    className="mt-4"
-                  >
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="flex items-center gap-2">
-                        <span className="inline-block h-2 w-2 rounded-full bg-brand animate-pulse" />
-                        {loadingMessage}
-                      </span>
-                      <span className="font-medium text-foreground">{progress}%</span>
-                    </div>
-                    <div className="relative mt-2 h-2 w-full overflow-hidden rounded-full bg-muted/50">
-                      <motion.div 
-                        className="h-full bg-gradient-brand" 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${progress}%` }}
-                        transition={{ duration: 0.3, ease: "easeOut" }}
-                      />
-                      <div className="absolute inset-0 overflow-hidden">
-                        <div className="h-full w-1/4 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-progress-shine" />
-                      </div>
-                    </div>
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
-
-              <AnimatePresence>
-                {previewUrl ? (
+          {/* Progress bar */}
+          <AnimatePresence>
+            {exporting && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                className="mt-6"
+              >
+                <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-secondary">
                   <motion.div 
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 8 }}
-                    className="mt-4"
-                  >
-                    <p className="text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">Preview</p>
-                    <audio 
-                      ref={audioElRef} 
-                      controls 
-                      className="mt-2 w-full rounded-lg" 
-                      src={previewUrl} 
-                    />
-                  </motion.div>
-                ) : null}
-              </AnimatePresence>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <section className="glass-card rounded-2xl p-4 md:col-span-2" aria-label="Voice tuning">
-              <h3 className="text-sm font-semibold">Fine-tune</h3>
-
-              <div className="mt-4 grid gap-4">
-                <SliderRow label="Rate" value={rate} min={0.6} max={1.4} step={0.05} onValue={setRate} />
-                <SliderRow label="Pitch" value={pitch} min={0.5} max={1.5} step={0.05} onValue={setPitch} />
-                <SliderRow label="Volume" value={volume} min={0.2} max={1} step={0.05} onValue={setVolume} />
-              </div>
-            </section>
-
-            <section className="glass-card rounded-2xl p-4" aria-label="Effects">
-              <h3 className="text-sm font-semibold">Effects</h3>
-              <p className="mt-1 text-sm text-muted-foreground">For live playback only.</p>
-
-              <div className="mt-4 space-y-3">
-                <ToggleRow
-                  label="Radio"
-                  description="High-pass + subtle distortion"
-                  checked={effects.radio}
-                  onCheckedChange={(v) => setEffects((e) => ({ ...e, radio: v }))}
-                />
-                <ToggleRow
-                  label="Echo"
-                  description="Delay with feedback"
-                  checked={effects.echo}
-                  onCheckedChange={(v) => setEffects((e) => ({ ...e, echo: v }))}
-                />
-                <ToggleRow
-                  label="Crystal Clear"
-                  description="Compressor + clarity boost"
-                  checked={effects.crystal}
-                  onCheckedChange={(v) => setEffects((e) => ({ ...e, crystal: v }))}
-                />
-              </div>
-            </section>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <PresetBar
-              activeId={activePreset}
-              onPreset={(p) => {
-                onPreset(p);
-                toast.success(`${p.label} preset applied.`);
-              }}
-            />
-            <FileDropZone onText={(t) => setText(t)} />
-          </div>
-
-          <section className="glass-card rounded-2xl p-4" aria-label="Live transcript highlighting">
-            <h3 className="text-sm font-semibold">Word-by-word highlighting</h3>
-            <p className="mt-1 text-sm text-muted-foreground">This preview highlights boundaries during live playback.</p>
-
-            <div className="mt-3 rounded-xl bg-background/40 p-4 text-sm leading-relaxed">
-              {renderHighlight(highlightedMarkup)}
-            </div>
-          </section>
-
-          <AdSlot slotId="BOTTOM_RESPONSIVE" label="Sponsored" className="pt-2" />
+                    className="h-full bg-gradient-brand" 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 0.3, ease: "easeOut" }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-2 text-center">{progress}%</p>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-      </motion.article>
+      </motion.div>
 
-      <aside className="space-y-6">
-        <AdSlot slotId="SIDEBAR_RECTANGLE" label="Sponsored" sizeHint="300×600" />
-
-        <div className="glass-card rounded-2xl p-5">
-          <h3 className="text-sm font-semibold">How it works</h3>
-          <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
-            <li>Enter or paste your text.</li>
-            <li>Click "Download MP3".</li>
-            <li>Your browser will automatically download the file.</li>
-            <li>Use the audio player to preview before sharing.</li>
-          </ol>
-          <p className="mt-3 text-xs text-muted-foreground/70">
-            Powered by neural voices — no permissions or plugins required.
-          </p>
-        </div>
-      </aside>
-    </section>
-  );
-}
-
-function SliderRow({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onValue,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onValue: (v: number) => void;
-}) {
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between">
-        <Label className="text-sm">{label}</Label>
-        <span className="text-xs font-medium text-muted-foreground">{value.toFixed(2)}</span>
-      </div>
-      <Slider
-        value={[value]}
-        min={min}
-        max={max}
-        step={step}
-        onValueChange={(v) => onValue(v[0] ?? value)}
-      />
+      {/* Audio Preview & Visualizer */}
+      <AnimatePresence>
+        {previewUrl && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="mt-8"
+          >
+            <div className="glass-card-elevated rounded-2xl p-6 overflow-hidden">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold">Audio Preview</h3>
+                <Button variant="outline" size="xs" asChild>
+                  <a href={previewUrl} download="voiceover.mp3">
+                    <Download size={14} />
+                    Download
+                  </a>
+                </Button>
+              </div>
+              
+              <WaveVisualizer 
+                isActive={state.isSpeaking || exporting} 
+                pulse={pulse} 
+                analyser={previewUrl ? analyserRef.current : null} 
+                className="h-20 mb-4"
+              />
+              
+              <audio 
+                ref={audioElRef} 
+                controls 
+                className="w-full h-10 rounded-lg" 
+                src={previewUrl} 
+              />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
-  );
-}
-
-function ToggleRow({
-  label,
-  description,
-  checked,
-  onCheckedChange,
-}: {
-  label: string;
-  description: string;
-  checked: boolean;
-  onCheckedChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div>
-        <p className="text-sm font-medium">{label}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
-    </div>
-  );
-}
-
-function renderHighlight(markup: string) {
-  const parts: Array<{ t: string; h: boolean }> = [];
-  let rest = markup;
-
-  while (rest.includes("[[H]]")) {
-    const a = rest.indexOf("[[H]]");
-    const b = rest.indexOf("[[/H]]");
-    if (a === -1 || b === -1) break;
-
-    const before = rest.slice(0, a);
-    const mid = rest.slice(a + 5, b);
-    parts.push({ t: before, h: false });
-    parts.push({ t: mid, h: true });
-    rest = rest.slice(b + 6);
-  }
-  parts.push({ t: rest, h: false });
-
-  return (
-    <p>
-      {parts.map((p, i) =>
-        p.h ? (
-          <mark key={i} className="rounded bg-brand/20 px-1 text-foreground">
-            {p.t}
-          </mark>
-        ) : (
-          <span key={i}>{p.t}</span>
-        ),
-      )}
-    </p>
   );
 }
