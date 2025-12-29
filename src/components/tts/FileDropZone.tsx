@@ -7,9 +7,11 @@ import { toast } from "sonner";
 export function FileDropZone({
   onText,
   className,
+  compact = false,
 }: {
   onText: (text: string) => void;
   className?: string;
+  compact?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [isOver, setIsOver] = useState(false);
@@ -40,6 +42,32 @@ export function FileDropZone({
     },
     [onText],
   );
+
+  if (compact) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Upload size={14} />
+          Import file
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".txt,.docx"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.currentTarget.files?.[0];
+            if (file) void readFile(file);
+            e.currentTarget.value = "";
+          }}
+        />
+      </>
+    );
+  }
 
   return (
     <div

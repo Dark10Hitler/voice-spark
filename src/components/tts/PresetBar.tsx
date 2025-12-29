@@ -44,27 +44,20 @@ export function PresetBar({
   activeId?: Preset["id"] | null;
 }) {
   return (
-    <section aria-label="Voice presets" className="glass-card rounded-2xl p-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h2 className="text-sm font-semibold tracking-tight">Moods</h2>
-          <p className="mt-1 text-sm text-muted-foreground">One tap sets pitch/rate/effects instantly.</p>
-        </div>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        {PRESETS.map((p) => (
-          <Button
-            key={p.id}
-            type="button"
-            variant={activeId === p.id ? "hero" : "premium"}
-            size="sm"
-            onClick={() => onPreset(p)}
-          >
-            {p.label}
-          </Button>
-        ))}
-      </div>
-    </section>
+    <div className="flex flex-wrap items-center gap-3">
+      <span className="text-sm font-medium text-muted-foreground">Presets:</span>
+      {PRESETS.map((p) => (
+        <Button
+          key={p.id}
+          type="button"
+          variant={activeId === p.id ? "default" : "outline"}
+          size="sm"
+          onClick={() => onPreset(p)}
+          className="rounded-full"
+        >
+          {p.label}
+        </Button>
+      ))}
+    </div>
   );
 }
