@@ -65,6 +65,7 @@ export function TtsStudio() {
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
+  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
   const cancelRef = useRef(false);
 
   const { voices, resolvedVoice, state, speak, pause, resume, stop, detectedLanguage } = useSpeechEngine(text, {
@@ -89,25 +90,26 @@ export function TtsStudio() {
     const el = audioElRef.current;
     if (!el) return;
 
-    // create analyser for the preview element
-    const ctx = audioCtxRef.current ?? new AudioContext();
-    audioCtxRef.current = ctx;
+    // Create AudioContext if needed
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new AudioContext();
+    }
+    const ctx = audioCtxRef.current;
 
-    const analyser = analyserRef.current ?? ctx.createAnalyser();
-    analyser.fftSize = 2048;
-    analyserRef.current = analyser;
+    // Create analyser if needed
+    if (!analyserRef.current) {
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyserRef.current = analyser;
+      analyser.connect(ctx.destination);
+    }
 
-    const src = ctx.createMediaElementSource(el);
-    src.connect(analyser);
-    analyser.connect(ctx.destination);
-
-    return () => {
-      try {
-        src.disconnect();
-      } catch {
-        // ignore
-      }
-    };
+    // Only create MediaElementSource once per audio element
+    if (!sourceNodeRef.current) {
+      const src = ctx.createMediaElementSource(el);
+      src.connect(analyserRef.current);
+      sourceNodeRef.current = src;
+    }
   }, [previewUrl]);
 
   useEffect(() => {
