@@ -24,8 +24,24 @@ import { useSpeechEngine } from "@/components/tts/useSpeechEngine";
 import { chunkText } from "@/components/tts/split";
 import { AdSlot } from "@/components/ads/AdSlot";
 
-import { applyOfflineEffects, encodeMp3FromAudioBuffer } from "@/lib/audio/export";
-import { supabase } from "@/integrations/supabase/client";
+// Voice mapping: detected language -> edge-tts voice ID
+const VOICE_MAP: Record<string, string> = {
+  en: "en-US-ChristopherNeural",
+  ru: "ru-RU-SvetlanaNeural",
+  uk: "uk-UA-PolinaNeural",
+  de: "de-DE-ConradNeural",
+  fr: "fr-FR-DeniseNeural",
+  es: "es-ES-ElviraNeural",
+  it: "it-IT-ElsaNeural",
+  pt: "pt-BR-FranciscaNeural",
+  zh: "zh-CN-XiaoxiaoNeural",
+  ja: "ja-JP-NanamiNeural",
+  ko: "ko-KR-SunHiNeural",
+  ar: "ar-SA-ZariyahNeural",
+  hi: "hi-IN-SwaraNeural",
+};
+
+const BACKEND_URL = "https://back-z6i3.onrender.com";
 
 type Effects = { radio: boolean; echo: boolean; crystal: boolean };
 
@@ -44,6 +60,7 @@ export function TtsStudio() {
   const [exporting, setExporting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState("Creating high-quality MP3...");
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -118,52 +135,51 @@ export function TtsStudio() {
     cancelRef.current = false;
     setExporting(true);
     setProgress(10);
+    setLoadingMessage("Creating high-quality MP3...");
 
     try {
       stop();
 
-      // Call the Hugging Face TTS edge function
+      // Get the voice ID for the detected language
+      const voiceId = VOICE_MAP[detectedLanguage.tag] || VOICE_MAP.en;
+
       setProgress(20);
-      
-      const { data, error } = await supabase.functions.invoke("text-to-speech", {
-        body: { text: text.trim(), lang: detectedLanguage.tag },
+
+      // Show cold-start message after 3 seconds
+      const coldStartTimer = setTimeout(() => {
+        setLoadingMessage("Server is starting up, please wait...");
+      }, 3000);
+
+      // Call the Python backend
+      const response = await fetch(`${BACKEND_URL}/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: text.trim(),
+          voice: voiceId,
+        }),
       });
+
+      clearTimeout(coldStartTimer);
 
       if (cancelRef.current) throw new Error("Export cancelled");
 
-      if (error) {
-        throw new Error(error.message || "TTS API error");
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText || `Server error: ${response.status}`);
       }
-
-      if (!data?.audio) {
-        throw new Error("No audio returned from TTS service");
-      }
-
-      setProgress(60);
-
-      // Decode base64 to audio buffer
-      const binaryString = atob(data.audio);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-
-      const ctx = audioCtxRef.current ?? new AudioContext();
-      audioCtxRef.current = ctx;
-      if (ctx.state === "suspended") await ctx.resume();
 
       setProgress(70);
+      setLoadingMessage("Processing audio...");
 
-      // Decode to AudioBuffer
-      const decoded = await ctx.decodeAudioData(bytes.buffer);
+      // Get the MP3 blob directly from response
+      const mp3Blob = await response.blob();
 
-      // Apply effects
-      const processed = await applyOfflineEffects(decoded, effects);
-
-      setProgress(85);
-
-      // Encode to MP3
-      const mp3Blob = await encodeMp3FromAudioBuffer(processed, 192);
+      if (!mp3Blob || mp3Blob.size === 0) {
+        throw new Error("No audio returned from server");
+      }
 
       setProgress(100);
 
@@ -174,10 +190,10 @@ export function TtsStudio() {
       const url = URL.createObjectURL(mp3Blob);
       setPreviewUrl(url);
 
-      // Auto-download
+      // Auto-download with fixed filename
       const link = document.createElement("a");
       link.href = url;
-      link.download = `audio-speech-${Date.now()}.mp3`;
+      link.download = "voiceover.mp3";
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -190,6 +206,7 @@ export function TtsStudio() {
     } finally {
       setExporting(false);
       setProgress(0);
+      setLoadingMessage("Creating high-quality MP3...");
     }
   };
 
@@ -294,7 +311,7 @@ export function TtsStudio() {
             <div className="glass-card rounded-2xl p-4">
               <p className="text-sm font-semibold">Export</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                MP3 export is 100% local. Due to browser limitations, it captures this tab’s audio (you’ll be prompted).
+                AI-powered TTS export. No permissions needed — works on all devices.
               </p>
 
               <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -327,7 +344,7 @@ export function TtsStudio() {
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span className="flex items-center gap-2">
                         <span className="inline-block h-2 w-2 rounded-full bg-brand animate-pulse" />
-                        Generating audio...
+                        {loadingMessage}
                       </span>
                       <span className="font-medium text-foreground">{progress}%</span>
                     </div>
@@ -380,7 +397,7 @@ export function TtsStudio() {
 
             <section className="glass-card rounded-2xl p-4" aria-label="Effects">
               <h3 className="text-sm font-semibold">Effects</h3>
-              <p className="mt-1 text-sm text-muted-foreground">Applied to exported MP3 + preview.</p>
+              <p className="mt-1 text-sm text-muted-foreground">For live playback only.</p>
 
               <div className="mt-4 space-y-3">
                 <ToggleRow
@@ -433,13 +450,16 @@ export function TtsStudio() {
         <AdSlot slotId="SIDEBAR_RECTANGLE" label="Sponsored" sizeHint="300×600" />
 
         <div className="glass-card rounded-2xl p-5">
-          <h3 className="text-sm font-semibold">Export checklist</h3>
+          <h3 className="text-sm font-semibold">How it works</h3>
           <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
-            <li>Click “Download MP3”.</li>
-            <li>In the browser prompt, choose “This tab”.</li>
-            <li>Turn on “Share tab audio” (otherwise export will be silent).</li>
-            <li>Keep this tab focused until export finishes.</li>
+            <li>Enter or paste your text.</li>
+            <li>Click "Download MP3".</li>
+            <li>Your browser will automatically download the file.</li>
+            <li>Use the audio player to preview before sharing.</li>
           </ol>
+          <p className="mt-3 text-xs text-muted-foreground/70">
+            Powered by neural voices — no permissions or plugins required.
+          </p>
         </div>
       </aside>
     </section>
@@ -530,35 +550,4 @@ function renderHighlight(markup: string) {
       )}
     </p>
   );
-}
-
-function buildUtterances(
-  fullText: string,
-  opts: {
-    voice?: SpeechSynthesisVoice;
-    lang: string;
-    rate: number;
-    pitch: number;
-    volume: number;
-    onChunkBoundaryAbs: (absCharIndex: number) => void;
-  },
-) {
-  // Use the same chunking logic as playback; keep utterances referenced to avoid GC.
-  const chunks = chunkText(fullText);
-
-  return chunks.map((c) => {
-    const u = new SpeechSynthesisUtterance(c.text);
-    u.lang = opts.voice?.lang || opts.lang;
-    u.rate = opts.rate;
-    u.pitch = opts.pitch;
-    u.volume = opts.volume;
-    if (opts.voice) u.voice = opts.voice;
-
-    u.onboundary = (ev: any) => {
-      const rel = ev?.charIndex ?? 0;
-      opts.onChunkBoundaryAbs(c.start + rel);
-    };
-
-    return u;
-  });
 }
