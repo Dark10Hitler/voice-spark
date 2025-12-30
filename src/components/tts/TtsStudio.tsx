@@ -435,6 +435,12 @@ export function TtsStudio() {
         </div>
       </motion.div>
 
+      {/* Ad Placeholder 1 */}
+      <div className="mt-8 text-center">
+        <span className="text-[8px] text-muted-foreground/50 uppercase tracking-wider">Advertisement</span>
+        <div className="adsense-placeholder mt-1 h-24 rounded-xl border border-dashed border-border/30 bg-muted/20" />
+      </div>
+
       {/* Audio Preview & Visualizer */}
       <AnimatePresence>
         {previewUrl && (
@@ -472,6 +478,12 @@ export function TtsStudio() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Ad Placeholder 2 - Bottom */}
+      <div className="mt-12 text-center">
+        <span className="text-[8px] text-muted-foreground/50 uppercase tracking-wider">Advertisement</span>
+        <div className="adsense-placeholder mt-1 h-24 rounded-xl border border-dashed border-border/30 bg-muted/20" />
+      </div>
     </div>
   );
 }
