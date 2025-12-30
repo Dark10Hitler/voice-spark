@@ -150,6 +150,18 @@ export function SeoFooter() {
             >
               Terms of Service
             </NavLink>
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== "undefined" && (window as any).googlefc?.callbackQueue) {
+                  (window as any).googlefc.callbackQueue.push({ CONSENT_DATA_READY: () => {} });
+                  (window as any).googlefc.showRevocationMessage?.();
+                }
+              }}
+              className="text-muted-foreground hover:text-foreground transition-colors story-link"
+            >
+              Cookie Settings
+            </button>
           </div>
         </div>
       </div>
