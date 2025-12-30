@@ -25,7 +25,7 @@ export default function PrivacyPolicy() {
           <h2>Local processing</h2>
           <p>
             We do not require an account and we do not upload your scripts for processing. Playback is performed using
-            your browser’s built-in speech engine.
+            your browser's built-in speech engine.
           </p>
 
           <h2>Cookies</h2>
@@ -35,9 +35,32 @@ export default function PrivacyPolicy() {
             to personalize or measure ads according to their policies.
           </p>
 
+          <h2>Google AdSense and Personalized Ads (EEA/UK Users)</h2>
+          <p>
+            We use Google AdSense to display advertisements on this website. Google, as a third-party vendor, uses cookies 
+            to serve ads based on your prior visits to this website or other websites. For users in the European Economic 
+            Area (EEA) and the United Kingdom (UK), we obtain your consent before serving personalized ads.
+          </p>
+          <p>
+            Google uses advertising cookies to enable it and its partners to serve ads based on your browsing behavior. 
+            You may opt out of personalized advertising by visiting{" "}
+            <a href="https://www.google.com/settings/ads" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+              Google Ads Settings
+            </a>
+            . Alternatively, you may opt out of third-party vendor cookies by visiting{" "}
+            <a href="https://www.aboutads.info/choices/" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+              www.aboutads.info
+            </a>
+            .
+          </p>
+          <p>
+            You can change your cookie consent preferences at any time by clicking the "Cookie Settings" link in the footer 
+            of this website. This allows you to withdraw or modify your consent for personalized advertising.
+          </p>
+
           <h2>Ads</h2>
           <p>
-            This site is optimized for advertising-supported use. Ad containers are clearly labeled as “Sponsored”.
+            This site is optimized for advertising-supported use. Ad containers are clearly labeled as "Sponsored" or "Advertisement".
           </p>
 
           <h2>Contact</h2>
